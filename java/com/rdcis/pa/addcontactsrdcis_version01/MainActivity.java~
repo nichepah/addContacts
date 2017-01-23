@@ -1,0 +1,936 @@
+package com.rdcis.pa.addcontactsrdcis_version01;
+
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.AsyncTask;
+import android.support.v7.app.AppCompatActivity;
+import android.os.Bundle;
+import android.view.Menu;
+import android.view.MenuItem;
+
+import android.content.ContentProviderOperation;
+import android.content.ContentProviderResult;
+import android.content.Context;
+import android.content.OperationApplicationException;
+import android.os.RemoteException;
+import android.provider.ContactsContract;
+import android.provider.ContactsContract.CommonDataKinds.Phone;
+import android.provider.ContactsContract.CommonDataKinds.StructuredName;
+import android.provider.ContactsContract.Data;
+import android.provider.ContactsContract.RawContacts;
+import android.view.View;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import android.widget.Toast;
+
+import android.os.AsyncTask;
+import java.util.ArrayList;
+
+
+public class MainActivity extends AppCompatActivity {
+    private ProgressBar spinner;
+    //private Button b1;
+    Context cntx;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        cntx = getApplicationContext();
+
+        Button b1 = (Button) findViewById(R.id.button);
+        Button b2 = (Button) findViewById(R.id.button2); //for deleting 898688...stuff earlier added
+       // Button b3 = (Button) findViewById(R.id.button3); //for deleting 0898688...stuff earlier added
+
+        spinner = (ProgressBar) findViewById(R.id.progressBar1);
+        spinner.setVisibility(View.GONE);
+
+        b1.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                spinner.setVisibility(View.VISIBLE);
+                new AddContacts().execute();
+            }
+        });
+
+        b2.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                spinner.setVisibility(View.VISIBLE);
+                new DelContacts1().execute();           //for deleting 898688...stuff earlier added
+            }
+        });
+/*
+        b3.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                spinner.setVisibility(View.VISIBLE);
+                new AddContacts1().execute();             //for testing; for  adding 898688...stuff
+
+            }
+        });
+*/
+
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.menu_main, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle clicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        int id = item.getItemId();
+
+        //noinspection SimplifiableIfStatement
+        if (id == R.id.action_settings) {
+            return true;
+        }
+
+        return super.onOptionsItemSelected(item);
+    }
+
+//the function that writes contacts
+public void WritePhoneContact(String displayName, String design, String epabx, String number, Context cntx ) {
+        Context context = cntx; //Application's context or Activity's context
+        String strDisplayName = displayName; // Name of the Person to add
+        String strNumber = number; //number of the person to add with the Contact
+        String strDesign = design; //designation of the person to add with contact
+        String strEpabx = epabx; //epabx work phone of the person to add with conbtact
+
+        ArrayList<ContentProviderOperation> cntProOper = new ArrayList<ContentProviderOperation>();
+        int contactIndex = cntProOper.size();//ContactSize
+
+        //Newly Inserted contact
+        // A raw contact will be inserted ContactsContract.RawContacts table in contacts database.
+        cntProOper.add(ContentProviderOperation.newInsert(RawContacts.CONTENT_URI)//Step1
+                .withValue(RawContacts.ACCOUNT_TYPE, null)
+                .withValue(RawContacts.ACCOUNT_NAME, null).build());
+
+        //Display name will be inserted in ContactsContract.Data table
+        cntProOper.add(ContentProviderOperation.newInsert(Data.CONTENT_URI)//Step2
+                .withValueBackReference(Data.RAW_CONTACT_ID, contactIndex)
+                .withValue(Data.MIMETYPE, StructuredName.CONTENT_ITEM_TYPE)
+                .withValue(StructuredName.DISPLAY_NAME, strDisplayName) // Name of the contact
+                .build());
+        //Mobile number will be inserted in ContactsContract.Data table
+        cntProOper.add(ContentProviderOperation.newInsert(Data.CONTENT_URI)//Step 3
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, contactIndex)
+                .withValue(Data.MIMETYPE, Phone.CONTENT_ITEM_TYPE)
+                .withValue(Phone.NUMBER, strNumber) // Number to be added
+                .withValue(Phone.TYPE, Phone.TYPE_MOBILE).build()); //Type like HOME, MOBILE etc
+        //Designation to be inserted
+        cntProOper.add(ContentProviderOperation.newInsert(Data.CONTENT_URI)//Step 4
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, contactIndex)
+                .withValue(Data.MIMETYPE, ContactsContract.CommonDataKinds.Organization.CONTENT_ITEM_TYPE)
+                .withValue(ContactsContract.CommonDataKinds.Organization.COMPANY, "RDCIS SAIL")
+                .withValue(ContactsContract.CommonDataKinds.Organization.TITLE, strDesign)
+                .build());
+
+        //EPABX Work number will be inserted in ContactsContract.Data table
+        cntProOper.add(ContentProviderOperation.newInsert(Data.CONTENT_URI)//Step 5
+                .withValueBackReference(ContactsContract.Data.RAW_CONTACT_ID, contactIndex)
+                .withValue(Data.MIMETYPE, Phone.CONTENT_ITEM_TYPE)
+                .withValue(Phone.NUMBER, strEpabx) // Number to be added
+                .withValue(Phone.TYPE, Phone.TYPE_WORK).build()); //work epabx phone
+
+        try {
+            // We will do batch operation to insert all above data
+            //Contains the output of the app of a ContentProviderOperation.
+            //It is sure to have exactly one of uri or count set
+            ContentProviderResult[] contentProresult = context.getContentResolver().applyBatch(ContactsContract.AUTHORITY, cntProOper);
+        } catch (RemoteException exp) {
+            //logs;
+        } catch (OperationApplicationException exp) {
+            //logs
+        }
+    }
+
+//the function that deletes contacts
+public static boolean deleteContact(Context ctx, String phone, String name) {
+        Uri contactUri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(phone));
+        Cursor cur = ctx.getContentResolver().query(contactUri, null, null, null, null);
+        try {
+            if (cur.moveToFirst()) {
+                do {
+                    if (cur.getString(cur.getColumnIndex(ContactsContract.PhoneLookup.DISPLAY_NAME)).equals(name)) {
+                        String lookupKey = cur.getString(cur.getColumnIndex(ContactsContract.Contacts.LOOKUP_KEY));
+                        Uri uri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_LOOKUP_URI, lookupKey);
+                        ctx.getContentResolver().delete(uri, null, null);
+                        return true;
+                    }
+
+                } while (cur.moveToNext());
+            }
+
+        } catch (Exception e) {
+            System.out.println(e.getStackTrace());
+        } finally {
+            cur.close();
+        }
+        return false;
+    }
+
+//final version of async addcontacts, with +91 in mob
+private class AddContacts extends AsyncTask<String, Integer, Long> {
+    @Override
+    protected Long doInBackground(String... params) {
+        WritePhoneContact("Acharya Sudip", "AM", "2452", "+918986880192",cntx);
+        WritePhoneContact("Agrawal Dr. BB", "GM (BE&A&E)", "2311", "+918986880051",cntx);
+        WritePhoneContact("Ahmad Md Shakil ", "SR MGR (C)", "2596", "+918986880199",cntx);
+        WritePhoneContact("Ahuja RK", "DGM", "2203", "+918986880319",cntx);
+        WritePhoneContact("Akhtar Md. ", "DM", "2421", "+918986880163",cntx);
+        WritePhoneContact("Alam Md. Serfraj", "AM", "2372", "+918986880295",cntx);
+        WritePhoneContact("Aman Md. Sharique", "AM", "2295", "+918986880207",cntx);
+        WritePhoneContact("Anand BN", "DGM & HoD", "2296", "+918986880177",cntx);
+        WritePhoneContact("Anand Kumar Aniket", "MT(T)", "2261", "+918986880152",cntx);
+        WritePhoneContact("Aneesh PA", "AM", "2393", "+918986880327",cntx);
+        WritePhoneContact("Banerjee Indranil ", "AGM", "2461", "+918986880021",cntx);
+        WritePhoneContact("Banerjee Nirvik ", "DGM", "2453", "+918986880078",cntx);
+        WritePhoneContact("Banerjee P ", "DGM", "2467", "+918986880091",cntx);
+        WritePhoneContact("Banerjee S ", "SR MGR (C)", "2281", "+918986880214",cntx);
+        WritePhoneContact("Barua P ", "DGM & HoG", "2542", "+918986880304",cntx);
+        WritePhoneContact("Baskiyar R", "AGM", "2263", "+918986880085",cntx);
+        WritePhoneContact("Bhakat Dr AK ", "GM(BE)", "2515", "+918986880270",cntx);
+        WritePhoneContact("Bharati S", "AGM", "2301", "+918986880222",cntx);
+        WritePhoneContact("Bhaskar Ujjwal ", "DGM & CoC", "2511", "+918986880348",cntx);
+        WritePhoneContact("Bhowmik B", "DGM", "2493", "+918986880118",cntx);
+        WritePhoneContact("Biswal AK ", "DGM & HoG", "2292", "+918986880016",cntx);
+        WritePhoneContact("Burman AK", "DM (C)", "2276", "+918986880298",cntx);
+        WritePhoneContact("Chakraborty Basudev", "AGM", "2325", "+918986880066",cntx);
+        WritePhoneContact("Chakraborty S", "DM", "2270", "+918986880043",cntx);
+        WritePhoneContact("Chakravarty Ms Neeta ", "AGM", "2529", "+918986880286",cntx);
+        WritePhoneContact("Chandra Neeldeep", "AM", "", "+918986880305",cntx);
+        WritePhoneContact("Chatterjee A", "DM", "2228", "+918986880329",cntx);
+        WritePhoneContact("Chaudhuri Dr S ", "DGM & HoG", "2345", "+918986880038",cntx);
+        WritePhoneContact("Chauhan KJ", "DGM & I/C", "2290", "+918986880158",cntx);
+        WritePhoneContact("Chintaiah P", "DGM", "", "+918986880318",cntx);
+        WritePhoneContact("Choubey M", "DGM & HoG", "2470", "+918986880115",cntx);
+        WritePhoneContact("Choudhary Ram Ranjan", "DM", "2221", "+918986880035",cntx);
+        WritePhoneContact("Choudhary RB", "MGR", "2562", "+918986880292",cntx);
+        WritePhoneContact("Choudhary RR", "DM", "2244", "+918986880284",cntx);
+        WritePhoneContact("Choudhury B", "AGM(Audit)", "", "+918986880084",cntx);
+        WritePhoneContact("Chowdhury Md.Dr. G", "MGR", "2452", "+918986880148",cntx);
+        WritePhoneContact("Das BK", "SR MGR", "2594", "+918986880147",cntx);
+        WritePhoneContact("Das Dr TK ", "DGM & HoG", "2574", "+918986880059",cntx);
+        WritePhoneContact("Das HN", "AM", "2474", "+918986880065",cntx);
+        WritePhoneContact("Das SS ", "DGM & HoG", "2397", "+918986880252",cntx);
+        WritePhoneContact("Das UK ", "DM", "2264", "+918986880156",cntx);
+        WritePhoneContact("Dayal Vikash ", "SR MGR", "2371", "+918986880145",cntx);
+        WritePhoneContact("De s", "DGM", "", "+918986880248",cntx);
+        WritePhoneContact("De Saikat Kumar", "DM", "2294", "+918986874007",cntx);
+        WritePhoneContact("Deepa Ms. M", "AM", "", "+918986880171",cntx);
+        WritePhoneContact("Deva Dr. Anjana ", "AGM", "", "+918986880274",cntx);
+        WritePhoneContact("Devi Ms. Sujata ", "DM", "", "+918986880097",cntx);
+        WritePhoneContact("Dharma SS Kowshik", "JM", "", "+918986880128",cntx);
+        WritePhoneContact("Dhua Dr. SK ", "DGM", "", "+918986880217",cntx);
+        WritePhoneContact("Dutta Dr. Ramen", "GM (Steel & Ref)", "", "+918986880006",cntx);
+        WritePhoneContact("Dutta Ranjan ", "SR.MGR", "", "+918986880186",cntx);
+        WritePhoneContact("Gangadharan M ", "DGM & HoG", "", "+918986880345",cntx);
+        WritePhoneContact("Ghosh Ghosh", "AM", "", "+918986880.236",cntx);
+        WritePhoneContact("Ghosh KN", "DM", "", "+918986880060",cntx);
+        WritePhoneContact("Ghosh Somnath", "DGM & HoG", "", "+918986880048",cntx);
+        WritePhoneContact("Giri PK ", "MGR", "", "+918986880308",cntx);
+        WritePhoneContact("Gogoi Ms. Barsha ", "AGM", "", "+918986880112",cntx);
+        WritePhoneContact("Gopal Ravi ", "SR MGR", "", "+918986880103",cntx);
+        WritePhoneContact("Goswami Ayan ", "AM", "", "+918986880044",cntx);
+        WritePhoneContact("Goswami SP ", "DM", "", "+918986880227",cntx);
+        WritePhoneContact("Gupta A ", "GM (C, E & E)", "", "+918986880064",cntx);
+        WritePhoneContact("Gupta AK ", "DGM", "", "+918986880108",cntx);
+        WritePhoneContact("Gupta Antriksha", "AM", "", "+918986880169",cntx);
+        WritePhoneContact("Gupta INP ", "DGM", "", "+918986880114",cntx);
+        WritePhoneContact("Gupta Sanjay Kumar ", "MGR", "", "+918986880328",cntx);
+        WritePhoneContact("Gupta UK ", "AGM", "", "+918986880221",cntx);
+        WritePhoneContact("Halder D", "DGM", "", "+918986880302",cntx);
+        WritePhoneContact("Hembrom NNJ ", "AGM", "", "+918986880042",cntx);
+        WritePhoneContact("Hussain Shahid ", "SR MGR (C)", "", "+918986880336",cntx);
+        WritePhoneContact("Ilangovan S", "AGM", "", "+918986880022",cntx);
+        WritePhoneContact("Jain DK", "DGM & HoG", "", "+918986880201",cntx);
+        WritePhoneContact("Jee Shyam", "AM", "", "+918986880253",cntx);
+        WritePhoneContact("Jha BK", "AM", "", "+918986880349",cntx);
+        WritePhoneContact("Jha Capt. RK", "AGM", "", "+918986880230",cntx);
+        WritePhoneContact("Jha PK", "AM", "", "+918986880055",cntx);
+        WritePhoneContact("Jha RK ", "AM", "", "+918986880200",cntx);
+        WritePhoneContact("Jha RK ", "DGM & HoG", "", "+918986880296",cntx);
+        WritePhoneContact("Jha SK ", "AGM", "", "+918986880203",cntx);
+        WritePhoneContact("Jha VK ", "SR MGR", "", "+918986880139",cntx);
+        WritePhoneContact("Kalet M ", "AGM", "", "+918986880266",cntx);
+        WritePhoneContact("Karmakar D", "DGM", "", "+918986880273",cntx);
+        WritePhoneContact("Kathuria Ms. Laaxmu", "MT(T)", "", "+918986880093",cntx);
+        WritePhoneContact("Keshari KK ", "DGM", "", "+918986880209",cntx);
+        WritePhoneContact("Khalkho B", "DM", "", "+918986880264",cntx);
+        WritePhoneContact("Khalkho Ms. Bhawna", "MT(T)", "", "+918986880113",cntx);
+        WritePhoneContact("Khan S ", "DGM", "", "+918986880301",cntx);
+        WritePhoneContact("Kirtivasan G", "Sr.Mgr", "", "+918986880047",cntx);
+        WritePhoneContact("Krishana Gopal", "DM", "", "+918986880033",cntx);
+        WritePhoneContact("Kujur Manish Kumar ", "AGM", "2477", "+918986880317",cntx);
+        WritePhoneContact("Kujur Ms. Smita", "MT(T)", "2415", "+918986880124",cntx);
+        WritePhoneContact("Kukreja VK ", "AGM", "2256", "+918986880168",cntx);
+        WritePhoneContact("Kumar Alok ", "SR MGR", "2266", "+918986880151",cntx);
+        WritePhoneContact("Kumar Anup", "AM", "2529", "+918986880204",cntx);
+        WritePhoneContact("Kumar Ashok", "DGM", "2253", "+918986880185",cntx);
+        WritePhoneContact("Kumar Chandan", "MT(T)", "2353", "+918986880082",cntx);
+        WritePhoneContact("Kumar Dr. A ", "SR MGR", "2451", "+918986880256",cntx);
+        WritePhoneContact("Kumar Dr. Vinod", "DGM", "2305", "+918986880202",cntx);
+        WritePhoneContact("Kumar Dr.Santosh ", "DGM & HoG", "2443", "+918986880275",cntx);
+        WritePhoneContact("Kumar Kaushlesh", "SR MGR", "2524", "+918986880303",cntx);
+        WritePhoneContact("Kumar Manoj", "DM", "", "+918986880455",cntx);
+        WritePhoneContact("Kumar Prabhas ", "DGM & HoG", "2307", "+918986880120",cntx);
+        WritePhoneContact("Kumar Pradip ", "DM", "2311", "+918986880247",cntx);
+        WritePhoneContact("Kumar Rajeev Ranjan ", "AM", "2513", "+918986880131",cntx);
+        WritePhoneContact("Kumar Rishi Sumeet ", "AGM", "2393", "+918986880346",cntx);
+        WritePhoneContact("Kumar Sachin", "MT(T)", "", "+918986880067",cntx);
+        WritePhoneContact("Kumar Sanjay ", "DGM & HoG", "2370", "+918986880105",cntx);
+        WritePhoneContact("Kumar Sanjeev ", "SR MGR", "2282", "+918986880310",cntx);
+        WritePhoneContact("Kumar Santosh", "Mgr", "BSL", "+918986880178",cntx);
+        WritePhoneContact("Kumar Siddhnath", "MT(T)", "", "+918986880165",cntx);
+        WritePhoneContact("Kumar Somnath ", "DM", "2228", "+918986880126",cntx);
+        WritePhoneContact("Kumar Vikash ", "SR MGR", "2353", "+918986880107",cntx);
+        WritePhoneContact("Kumar Vikash ", "AM", "", "+918986880190",cntx);
+        WritePhoneContact("Kushwaha SK", "SR MGR", "2510", "+918986880356",cntx);
+        WritePhoneContact("Madhav Manish", "Jm", "", "+918986880087",cntx);
+        WritePhoneContact("Mahapatra JC", "GM(P&A)", "", "+918986880004",cntx);
+        WritePhoneContact("Maheshwari GD ", "DGM & HoG", "2325", "+918986880251",cntx);
+        WritePhoneContact("Mahto SS ", "DM", "2540", "+918986880100",cntx);
+        WritePhoneContact("Maini PK ", "AGM", "2509", "+918986880235",cntx);
+        WritePhoneContact("Maitra Abhishek", "AM", "2455", "+918986880211",cntx);
+        WritePhoneContact("Mallick Aritra", "AGM", "2535", "+918986880125",cntx);
+        WritePhoneContact("Malviya Ankit", "DM", "2270", "+918986880045",cntx);
+        WritePhoneContact("Mandal C", "DGM & HoG", "2566", "+918986880288",cntx);
+        WritePhoneContact("Mandal M", "MGR (C)", "2286", "+918986880338",cntx);
+        WritePhoneContact("Manjhi KK", "AGM", "2510", "+918986880092",cntx);
+        WritePhoneContact("Mazumdar S Mitra ", "AGM", "2483", "+918986880104",cntx);
+        WritePhoneContact("Minz Lucas ", "MGR", "2269", "+918986880237",cntx);
+        WritePhoneContact("Minz Robinson ", "MGR (C)", "2311", "+918986880323",cntx);
+        WritePhoneContact("Mishra RM ", "SR MGR", "2346", "+918986880159",cntx);
+        WritePhoneContact("Misra Swayambhuba ", "DM", "2450", "+918986880063",cntx);
+        WritePhoneContact("Mitra Somnath ", "DGM", "2393", "+918986880347",cntx);
+        WritePhoneContact("Mohapatra SK", "DGM & HoG", "2471", "+918986880167",cntx);
+        WritePhoneContact("Mondal A", "AGM", "2398", "+918986880287",cntx);
+        WritePhoneContact("Mondal JS", "SR MGR", "2401", "+918986880166",cntx);
+        WritePhoneContact("Mondal Ujjal Kumar", "AM", "2221", "+918986880322",cntx);
+        WritePhoneContact("Nag Abhrojyoti  ", "AGM", "2232", "+918986880514",cntx);
+        WritePhoneContact("Nageshwaran Kartik", "MT(T)", "2261", "+918986880134",cntx);
+        WritePhoneContact("Nandy Dr. SK", "DGM", "2275", "+918986880335",cntx);
+        WritePhoneContact("Nayak RK", "AM", "2374", "+918986880135",cntx);
+        WritePhoneContact("Niyogi OS", "AM", "2508", "+918986880062",cntx);
+        WritePhoneContact("Pan Dr. SK ", "DGM", "2317", "+918986880144",cntx);
+        WritePhoneContact("Pandey Ms. Pratiksha", "AM", "2553", "+918986880058",cntx);
+        WritePhoneContact("PandeyTN ", "AGM", "2316", "+918986880503",cntx);
+        WritePhoneContact("Pankaj Pradeep K", "DM", "2529", "+918986880366",cntx);
+        WritePhoneContact("Panna Ms Samira ", "AGM", "2314", "+918986880208",cntx);
+        WritePhoneContact("Parida S ", "DGM", "2219", "+918986880034",cntx);
+        WritePhoneContact("Pathak BN", "AM", "2480", "+918986880052",cntx);
+        WritePhoneContact("Pathak DC", "AGM", "2258", "+918986880188",cntx);
+        WritePhoneContact("Pathak P ", "DGM", "2400", "+918986880223",cntx);
+        WritePhoneContact("Patnaik L", "GM (M&U)", "2259", "+918986880003",cntx);
+        WritePhoneContact("Patwari Kuntal", "SM", "", "+918986880076",cntx);
+        WritePhoneContact("Paul AK", "GM I/C.(RDCIS)", "2201", "+918986880000",cntx);
+        WritePhoneContact("Paul Amitava", "AGM", "2385", "+918986880326",cntx);
+        WritePhoneContact("Paul Ashim K ", "SR MGR (C)", "2336", "+918986880046",cntx);
+        WritePhoneContact("Pradhan N ", "DGM & HoG", "2312", "+918986880077",cntx);
+        WritePhoneContact("Prakash Satya ", "DM", "2374", "+918986880110",cntx);
+        WritePhoneContact("Prakash Shree", "AM", "2474", "+918986880181",cntx);
+        WritePhoneContact("Prasad Abdhesh ", "AM", "2228", "+918986880321",cntx);
+        WritePhoneContact("Prasad Anup", "AGM", "2350", "+918986880074",cntx);
+        WritePhoneContact("Prasad Ashit", "AGM", "2357", "+918986880030",cntx);
+        WritePhoneContact("Prasad BKP", "AGM", "2285", "+918986880187",cntx);
+        WritePhoneContact("Prasad Jwala ", "DM", "2517", "+918986880089",cntx);
+        WritePhoneContact("Prasad Ramanuj", "AM", "2541", "+918986880173",cntx);
+        WritePhoneContact("Raj Diwakar", "MT(T)", "2593", "+918986880079",cntx);
+        WritePhoneContact("Ram Chotu", "AM", "2448", "+918986880141",cntx);
+        WritePhoneContact("Ram HB ", "AM", "2246", "+918986880123",cntx);
+        WritePhoneContact("Ram Ratnesh Kumar", "DM", "2371", "+918986880142",cntx);
+        WritePhoneContact("Rath Manas ", "DGM", "2267", "+918986880220",cntx);
+        WritePhoneContact("Rath Sushant ", "AGM", "2536", "+918986880111",cntx);
+        WritePhoneContact("Reddy TS ", "DGM & HoG", "2583", "+918986880095",cntx);
+        WritePhoneContact("Rohidas PC", "AM", "2272", "+918986880072",cntx);
+        WritePhoneContact("Rouf Abdur", "AM", "2488", "+918986880193",cntx);
+        WritePhoneContact("Roy Indranil ", "AM", "2477", "+918986880037",cntx);
+        WritePhoneContact("Roy Mahadeo", "AGM", "2480", "+918986880344",cntx);
+        WritePhoneContact("Roy Snehangshu", "AM", "2271", "+918986880121",cntx);
+        WritePhoneContact("Saha KS", "AGM", "2248", "+918986880157",cntx);
+        WritePhoneContact("Saha SK", "MGR", "2463", "+918986880040",cntx);
+        WritePhoneContact("Sahana Pradip", "AM", "", "+918986880182",cntx);
+        WritePhoneContact("Sahay Rajesh Paty", "SR MGR", "2278", "+918986880195",cntx);
+        WritePhoneContact("Sahay VK ", "AGM", "2362", "+918986880162",cntx);
+        WritePhoneContact("Sahoo Dr. Basant Kumar ", "AM", "2450", "+918986880083",cntx);
+        WritePhoneContact("Sahoo Dr. Gadadhar ", "MGR", "2214", "+918986880025",cntx);
+        WritePhoneContact("Sahu AK ", "DGM & HoG", "2500", "+918986880029",cntx);
+        WritePhoneContact("Sahu NK ", "SR MGR (C)", "2592", "+918986880234",cntx);
+        WritePhoneContact("Saravanan Dr.P ", "MGR", "2485", "+918986880260",cntx);
+        WritePhoneContact("Sarkar B", "DGM", "2310", "+918986880281",cntx);
+        WritePhoneContact("Sarkar Paritosh ", "AGM", "2362", "+918986880499",cntx);
+        WritePhoneContact("Sarkar PP", "SR MGR", "2294", "+918986880028",cntx);
+        WritePhoneContact("Saw SK ", "AGM", "2300", "+918986880205",cntx);
+        WritePhoneContact("Saxena Atul", "GM (Product)", "2596", "+918986880280",cntx);
+        WritePhoneContact("Selvam ST", "AGM", "2221", "+918986880039",cntx);
+        WritePhoneContact("Selvi Ms S", "SR MGR", "2274", "+918986880320",cntx);
+        WritePhoneContact("Sen Dr. N ", "DGM & HoG", "2326", "+918986880153",cntx);
+        WritePhoneContact("Sen M ", "DGM", "2481", "+918986880116",cntx);
+        WritePhoneContact("Sen S", "SR MGR", "2202", "+918986880053",cntx);
+        WritePhoneContact("Sen Sagnik", "MT(T)", "", "+918986880024",cntx);
+        WritePhoneContact("Shankar Anand", "MT(T)", "2421", "+918986880137",cntx);
+        WritePhoneContact("Sharan AK", "AM", "2276", "+918986880224",cntx);
+        WritePhoneContact("Sharan Ms Archana ", "AGM", "2539", "+918986880106",cntx);
+        WritePhoneContact("Sharma KL ", "AGM", "2447", "+918986880191",cntx);
+        WritePhoneContact("Shree Ms Manju ", "AGM", "2293", "+918986880331",cntx);
+        WritePhoneContact("Shukla Sanjeev Kr ", "AGM", "2372", "+918986880279",cntx);
+        WritePhoneContact("Singh AK", "AM (C)", "2417", "+918986880090",cntx);
+        WritePhoneContact("Singh AK", "DM", "2438", "+918986880263",cntx);
+        WritePhoneContact("Singh BK", "AM", "2246", "+918986880313",cntx);
+        WritePhoneContact("Singh Digvijay ", "SR MGR", "2254", "+918986880189",cntx);
+        WritePhoneContact("Singh DK", "AGM", "2207", "+918986880243",cntx);
+        WritePhoneContact("Singh Dr.Balbir ", "DGM & HoG", "2449", "+918986880246",cntx);
+        WritePhoneContact("Singh JP", "SR MGR", "2441458", "+918986880355",cntx);
+        WritePhoneContact("Singh KK", "AGM", "2323", "+918986880290",cntx);
+        WritePhoneContact("Singh Ms Indu ", "MGR (C)", "2380", "+918986880027",cntx);
+        WritePhoneContact("Singh Raj Kr ", "MGR", "2499", "+918986880194",cntx);
+        WritePhoneContact("Singh Rajeev Kr ", "AGM", "2385", "+918986880324",cntx);
+        WritePhoneContact("Singh Raju Kr", "DM", "2513", "+918986880238",cntx);
+        WritePhoneContact("Singh Rakesh Kr", "DGM", "2520", "+918986880309",cntx);
+        WritePhoneContact("Singh RK ", "MGR", "2344", "+918986880080",cntx);
+        WritePhoneContact("Singh Shaktiveer", "MGR", "2353", "+918986880196",cntx);
+        WritePhoneContact("Singh SN", "AM", "2540", "+918986880081",cntx);
+        WritePhoneContact("Singh Tek ", "MGR", "2268", "+918986880337",cntx);
+        WritePhoneContact("Sinha Narendra K ", "AGM", "2262", "+918986880228",cntx);
+        WritePhoneContact("Sinha RB ", "MGR", "2491", "+918986880122",cntx);
+        WritePhoneContact("Srikanth S", "AGM & HoG", "2216", "+918986880261",cntx);
+        WritePhoneContact("Srivastava Rahul", "AM", "2529", "+918986880283",cntx);
+        WritePhoneContact("Srivastava SK", "AM", "2501", "+918986880267",cntx);
+        WritePhoneContact("Sudhir Shivprakash", "AM", "2594", "+918986880325",cntx);
+        WritePhoneContact("Thakur DK ", "SR MGR", "2344", "+918986880101",cntx);
+        WritePhoneContact("Thakur KR", "AGM", "2280", "+918986880226",cntx);
+        WritePhoneContact("Thakur SK", "MGR", "2282", "+918986880088",cntx);
+        WritePhoneContact("Tirkey Prema ", "DM", "2441458", "+918986880183",cntx);
+        WritePhoneContact("Tiwari Dr. SN ", "SR MGR", "2498", "+918986880096",cntx);
+        WritePhoneContact("Tiwari RK ", "MGR", "2581", "+918986880278",cntx);
+        WritePhoneContact("Toppo Krishna Kumar", "AM", "2586", "+918986880299",cntx);
+        WritePhoneContact("Upadhyay NC ", "AM", "2281", "+918986880098",cntx);
+        WritePhoneContact("Verma AK", "AGM", "2357", "+918986880036",cntx);
+        WritePhoneContact("Verma KK", "JE", "2249", "+918986880031",cntx);
+        return Long.valueOf(0);
+
+    }
+
+    protected void onProgressUpdate(Integer... progress) {
+
+    }
+
+    protected void onPostExecute(Long result) {
+    spinner.setVisibility(View.GONE);
+        Toast.makeText(MainActivity.this, "All Contacts Added", Toast.LENGTH_LONG).show();
+
+    }
+}
+//async del1 contacts, removes that starts with 898688, ie with neither 0 nor +91 as suffix
+private class DelContacts1 extends AsyncTask<String, Integer, Long> {
+        @Override
+        protected Long doInBackground(String... params) {
+            deleteContact(cntx, "8986880192", "Acharya Sudip");
+            deleteContact(cntx, "8986880051", "Agrawal Dr. BB");
+            deleteContact(cntx, "8986880199", "Ahmad Md Shakil ");
+            deleteContact(cntx, "8986880319", "Ahuja RK");
+            deleteContact(cntx, "8986880163", "Akhtar Md. ");
+            deleteContact(cntx, "8986880295", "Alam Md. Serfraj");
+            deleteContact(cntx, "8986880207", "Aman Md. Sharique");
+            deleteContact(cntx, "8986880177", "Anand BN");
+            deleteContact(cntx, "8986880152", "Anand Kumar Aniket");
+            deleteContact(cntx, "8986880327", "Aneesh PA");
+            deleteContact(cntx, "8986880021", "Banerjee Indranil ");
+            deleteContact(cntx, "8986880078", "Banerjee Nirvik ");
+            deleteContact(cntx, "8986880091", "Banerjee P ");
+            deleteContact(cntx, "8986880214", "Banerjee S ");
+            deleteContact(cntx, "8986880304", "Barua P ");
+            deleteContact(cntx, "8986880085", "Baskiyar R");
+            deleteContact(cntx, "8986880270", "Bhakat Dr AK ");
+            deleteContact(cntx, "8986880222", "Bharati S");
+            deleteContact(cntx, "8986880348", "Bhaskar Ujjwal ");
+            deleteContact(cntx, "8986880118", "Bhowmik B");
+            deleteContact(cntx, "8986880016", "Biswal AK ");
+            deleteContact(cntx, "8986880298", "Burman AK");
+            deleteContact(cntx, "8986880066", "Chakraborty Basudev");
+            deleteContact(cntx, "8986880043", "Chakraborty S");
+            deleteContact(cntx, "8986880286", "Chakravarty Ms Neeta ");
+            deleteContact(cntx, "8986880305", "Chandra Neeldeep");
+            deleteContact(cntx, "8986880329", "Chatterjee A");
+            deleteContact(cntx, "8986880038", "Chaudhuri Dr S ");
+            deleteContact(cntx, "8986880158", "Chauhan KJ");
+            deleteContact(cntx, "8986880318", "Chintaiah P");
+            deleteContact(cntx, "8986880115", "Choubey M");
+            deleteContact(cntx, "8986880035", "Choudhary Ram Ranjan");
+            deleteContact(cntx, "8986880292", "Choudhary RB");
+            deleteContact(cntx, "8986880284", "Choudhary RR");
+            deleteContact(cntx, "8986880084", "Choudhury B");
+            deleteContact(cntx, "8986880148", "Chowdhury Md.Dr. G");
+            deleteContact(cntx, "8986880147", "Das BK");
+            deleteContact(cntx, "8986880059", "Das Dr TK ");
+            deleteContact(cntx, "8986880065", "Das HN");
+            deleteContact(cntx, "8986880252", "Das SS ");
+            deleteContact(cntx, "8986880156", "Das UK ");
+            deleteContact(cntx, "8986880145", "Dayal Vikash ");
+            deleteContact(cntx, "8986880248", "De s");
+            deleteContact(cntx, "8986874007", "De Saikat Kumar");
+            deleteContact(cntx, "8986880171", "Deepa Ms. M");
+            deleteContact(cntx, "8986880274", "Deva Dr. Anjana ");
+            deleteContact(cntx, "8986880097", "Devi Ms. Sujata ");
+            deleteContact(cntx, "8986880128", "Dharma SS Kowshik");
+            deleteContact(cntx, "8986880217", "Dhua Dr. SK ");
+            deleteContact(cntx, "8986880006", "Dutta Dr. Ramen");
+            deleteContact(cntx, "8986880186", "Dutta Ranjan ");
+            deleteContact(cntx, "8986880345", "Gangadharan M ");
+            deleteContact(cntx, "8986880.236", "Ghosh Ghosh");
+            deleteContact(cntx, "8986880060", "Ghosh KN");
+            deleteContact(cntx, "8986880048", "Ghosh Somnath");
+            deleteContact(cntx, "8986880308", "Giri PK ");
+            deleteContact(cntx, "8986880112", "Gogoi Ms. Barsha ");
+            deleteContact(cntx, "8986880103", "Gopal Ravi ");
+            deleteContact(cntx, "8986880044", "Goswami Ayan ");
+            deleteContact(cntx, "8986880227", "Goswami SP ");
+            deleteContact(cntx, "8986880064", "Gupta A ");
+            deleteContact(cntx, "8986880108", "Gupta AK ");
+            deleteContact(cntx, "8986880169", "Gupta Antriksha");
+            deleteContact(cntx, "8986880114", "Gupta INP ");
+            deleteContact(cntx, "8986880328", "Gupta Sanjay Kumar ");
+            deleteContact(cntx, "8986880221", "Gupta UK ");
+            deleteContact(cntx, "8986880302", "Halder D");
+            deleteContact(cntx, "8986880042", "Hembrom NNJ ");
+            deleteContact(cntx, "8986880336", "Hussain Shahid ");
+            deleteContact(cntx, "8986880022", "Ilangovan S");
+            deleteContact(cntx, "8986880201", "Jain DK");
+            deleteContact(cntx, "8986880253", "Jee Shyam");
+            deleteContact(cntx, "8986880349", "Jha BK");
+            deleteContact(cntx, "8986880230", "Jha Capt. RK");
+            deleteContact(cntx, "8986880055", "Jha PK");
+            deleteContact(cntx, "8986880200", "Jha RK ");
+            deleteContact(cntx, "8986880296", "Jha RK ");
+            deleteContact(cntx, "8986880203", "Jha SK ");
+            deleteContact(cntx, "8986880139", "Jha VK ");
+            deleteContact(cntx, "8986880266", "Kalet M ");
+            deleteContact(cntx, "8986880273", "Karmakar D");
+            deleteContact(cntx, "8986880093", "Kathuria Ms. Laaxmu");
+            deleteContact(cntx, "8986880209", "Keshari KK ");
+            deleteContact(cntx, "8986880264", "Khalkho B");
+            deleteContact(cntx, "8986880113", "Khalkho Ms. Bhawna");
+            deleteContact(cntx, "8986880301", "Khan S ");
+            deleteContact(cntx, "8986880047", "Kirtivasan G");
+            deleteContact(cntx, "8986880033", "Krishana Gopal");
+            deleteContact(cntx, "8986880317", "Kujur Manish Kumar ");
+            deleteContact(cntx, "8986880124", "Kujur Ms. Smita");
+            deleteContact(cntx, "8986880168", "Kukreja VK ");
+            deleteContact(cntx, "8986880151", "Kumar Alok ");
+            deleteContact(cntx, "8986880204", "Kumar Anup");
+            deleteContact(cntx, "8986880185", "Kumar Ashok");
+            deleteContact(cntx, "8986880082", "Kumar Chandan");
+            deleteContact(cntx, "8986880256", "Kumar Dr. A ");
+            deleteContact(cntx, "8986880202", "Kumar Dr. Vinod");
+            deleteContact(cntx, "8986880275", "Kumar Dr.Santosh ");
+            deleteContact(cntx, "8986880303", "Kumar Kaushlesh");
+            deleteContact(cntx, "8986880455", "Kumar Manoj");
+            deleteContact(cntx, "8986880120", "Kumar Prabhas ");
+            deleteContact(cntx, "8986880247", "Kumar Pradip ");
+            deleteContact(cntx, "8986880131", "Kumar Rajeev Ranjan ");
+            deleteContact(cntx, "8986880346", "Kumar Rishi Sumeet ");
+            deleteContact(cntx, "8986880067", "Kumar Sachin");
+            deleteContact(cntx, "8986880105", "Kumar Sanjay ");
+            deleteContact(cntx, "8986880310", "Kumar Sanjeev ");
+            deleteContact(cntx, "8986880178", "Kumar Santosh");
+            deleteContact(cntx, "8986880165", "Kumar Siddhnath");
+            deleteContact(cntx, "8986880126", "Kumar Somnath ");
+            deleteContact(cntx, "8986880107", "Kumar Vikash ");
+            deleteContact(cntx, "8986880190", "Kumar Vikash ");
+            deleteContact(cntx, "8986880356", "Kushwaha SK");
+            deleteContact(cntx, "8986880087", "Madhav Manish");
+            deleteContact(cntx, "8986880004", "Mahapatra JC");
+            deleteContact(cntx, "8986880251", "Maheshwari GD ");
+            deleteContact(cntx, "8986880100", "Mahto SS ");
+            deleteContact(cntx, "8986880235", "Maini PK ");
+            deleteContact(cntx, "8986880211", "Maitra Abhishek");
+            deleteContact(cntx, "8986880125", "Mallick Aritra");
+            deleteContact(cntx, "8986880045", "Malviya Ankit");
+            deleteContact(cntx, "8986880288", "Mandal C");
+            deleteContact(cntx, "8986880338", "Mandal M");
+            deleteContact(cntx, "8986880092", "Manjhi KK");
+            deleteContact(cntx, "8986880104", "Mazumdar S Mitra ");
+            deleteContact(cntx, "8986880237", "Minz Lucas ");
+            deleteContact(cntx, "8986880323", "Minz Robinson ");
+            deleteContact(cntx, "8986880159", "Mishra RM ");
+            deleteContact(cntx, "8986880063", "Misra Swayambhuba ");
+            deleteContact(cntx, "8986880347", "Mitra Somnath ");
+            deleteContact(cntx, "8986880167", "Mohapatra SK");
+            deleteContact(cntx, "8986880287", "Mondal A");
+            deleteContact(cntx, "8986880166", "Mondal JS");
+            deleteContact(cntx, "8986880322", "Mondal Ujjal Kumar");
+            deleteContact(cntx, "8986880514", "Nag Abhrojyoti  ");
+            deleteContact(cntx, "8986880134", "Nageshwaran Kartik");
+            deleteContact(cntx, "8986880335", "Nandy Dr. SK");
+            deleteContact(cntx, "8986880135", "Nayak RK");
+            deleteContact(cntx, "8986880062", "Niyogi OS");
+            deleteContact(cntx, "8986880144", "Pan Dr. SK ");
+            deleteContact(cntx, "8986880058", "Pandey Ms. Pratiksha");
+            deleteContact(cntx, "8986880503", "PandeyTN ");
+            deleteContact(cntx, "8986880366", "Pankaj Pradeep K");
+            deleteContact(cntx, "8986880208", "Panna Ms Samira ");
+            deleteContact(cntx, "8986880034", "Parida S ");
+            deleteContact(cntx, "8986880052", "Pathak BN");
+            deleteContact(cntx, "8986880188", "Pathak DC");
+            deleteContact(cntx, "8986880223", "Pathak P ");
+            deleteContact(cntx, "8986880003", "Patnaik L");
+            deleteContact(cntx, "8986880076", "Patwari Kuntal");
+            deleteContact(cntx, "8986880000", "Paul AK");
+            deleteContact(cntx, "8986880326", "Paul Amitava");
+            deleteContact(cntx, "8986880046", "Paul Ashim K ");
+            deleteContact(cntx, "8986880077", "Pradhan N ");
+            deleteContact(cntx, "8986880110", "Prakash Satya ");
+            deleteContact(cntx, "8986880181", "Prakash Shree");
+            deleteContact(cntx, "8986880321", "Prasad Abdhesh ");
+            deleteContact(cntx, "8986880074", "Prasad Anup");
+            deleteContact(cntx, "8986880030", "Prasad Ashit");
+            deleteContact(cntx, "8986880187", "Prasad BKP");
+            deleteContact(cntx, "8986880089", "Prasad Jwala ");
+            deleteContact(cntx, "8986880173", "Prasad Ramanuj");
+            deleteContact(cntx, "8986880079", "Raj Diwakar");
+            deleteContact(cntx, "8986880141", "Ram Chotu");
+            deleteContact(cntx, "8986880123", "Ram HB ");
+            deleteContact(cntx, "8986880142", "Ram Ratnesh Kumar");
+            deleteContact(cntx, "8986880220", "Rath Manas ");
+            deleteContact(cntx, "8986880111", "Rath Sushant ");
+            deleteContact(cntx, "8986880095", "Reddy TS ");
+            deleteContact(cntx, "8986880072", "Rohidas PC");
+            deleteContact(cntx, "8986880193", "Rouf Abdur");
+            deleteContact(cntx, "8986880037", "Roy Indranil ");
+            deleteContact(cntx, "8986880344", "Roy Mahadeo");
+            deleteContact(cntx, "8986880121", "Roy Snehangshu");
+            deleteContact(cntx, "8986880157", "Saha KS");
+            deleteContact(cntx, "8986880040", "Saha SK");
+            deleteContact(cntx, "8986880182", "Sahana Pradip");
+            deleteContact(cntx, "8986880195", "Sahay Rajesh Paty");
+            deleteContact(cntx, "8986880162", "Sahay VK ");
+            deleteContact(cntx, "8986880083", "Sahoo Dr. Basant Kumar ");
+            deleteContact(cntx, "8986880025", "Sahoo Dr. Gadadhar ");
+            deleteContact(cntx, "8986880029", "Sahu AK ");
+            deleteContact(cntx, "8986880234", "Sahu NK ");
+            deleteContact(cntx, "8986880260", "Saravanan Dr.P ");
+            deleteContact(cntx, "8986880281", "Sarkar B");
+            deleteContact(cntx, "8986880499", "Sarkar Paritosh ");
+            deleteContact(cntx, "8986880028", "Sarkar PP");
+            deleteContact(cntx, "8986880205", "Saw SK ");
+            deleteContact(cntx, "8986880280", "Saxena Atul");
+            deleteContact(cntx, "8986880039", "Selvam ST");
+            deleteContact(cntx, "8986880320", "Selvi Ms S");
+            deleteContact(cntx, "8986880153", "Sen Dr. N ");
+            deleteContact(cntx, "8986880116", "Sen M ");
+            deleteContact(cntx, "8986880053", "Sen S");
+            deleteContact(cntx, "8986880024", "Sen Sagnik");
+            deleteContact(cntx, "8986880137", "Shankar Anand");
+            deleteContact(cntx, "8986880224", "Sharan AK");
+            deleteContact(cntx, "8986880106", "Sharan Ms Archana ");
+            deleteContact(cntx, "8986880191", "Sharma KL ");
+            deleteContact(cntx, "8986880331", "Shree Ms Manju ");
+            deleteContact(cntx, "8986880279", "Shukla Sanjeev Kr ");
+            deleteContact(cntx, "8986880090", "Singh AK");
+            deleteContact(cntx, "8986880263", "Singh AK");
+            deleteContact(cntx, "8986880313", "Singh BK");
+            deleteContact(cntx, "8986880189", "Singh Digvijay ");
+            deleteContact(cntx, "8986880243", "Singh DK");
+            deleteContact(cntx, "8986880246", "Singh Dr.Balbir ");
+            deleteContact(cntx, "8986880355", "Singh JP");
+            deleteContact(cntx, "8986880290", "Singh KK");
+            deleteContact(cntx, "8986880027", "Singh Ms Indu ");
+            deleteContact(cntx, "8986880194", "Singh Raj Kr ");
+            deleteContact(cntx, "8986880324", "Singh Rajeev Kr ");
+            deleteContact(cntx, "8986880238", "Singh Raju Kr");
+            deleteContact(cntx, "8986880309", "Singh Rakesh Kr");
+            deleteContact(cntx, "8986880080", "Singh RK ");
+            deleteContact(cntx, "8986880196", "Singh Shaktiveer");
+            deleteContact(cntx, "8986880081", "Singh SN");
+            deleteContact(cntx, "8986880337", "Singh Tek ");
+            deleteContact(cntx, "8986880228", "Sinha Narendra K ");
+            deleteContact(cntx, "8986880122", "Sinha RB ");
+            deleteContact(cntx, "8986880261", "Srikanth S");
+            deleteContact(cntx, "8986880283", "Srivastava Rahul");
+            deleteContact(cntx, "8986880267", "Srivastava SK");
+            deleteContact(cntx, "8986880325", "Sudhir Shivprakash");
+            deleteContact(cntx, "8986880101", "Thakur DK ");
+            deleteContact(cntx, "8986880226", "Thakur KR");
+            deleteContact(cntx, "8986880088", "Thakur SK");
+            deleteContact(cntx, "8986880183", "Tirkey Prema ");
+            deleteContact(cntx, "8986880096", "Tiwari Dr. SN ");
+            deleteContact(cntx, "8986880278", "Tiwari RK ");
+            deleteContact(cntx, "8986880299", "Toppo Krishna Kumar");
+            deleteContact(cntx, "8986880098", "Upadhyay NC ");
+            deleteContact(cntx, "8986880036", "Verma AK");
+            deleteContact(cntx, "8986880031", "Verma KK");
+            return Long.valueOf(0);
+
+        }
+
+        protected void onProgressUpdate(Integer... progress) {
+
+        }
+
+        protected void onPostExecute(Long result) {
+            spinner.setVisibility(View.GONE);
+            Toast.makeText(MainActivity.this, "R&D Contacts Deleted", Toast.LENGTH_LONG).show();
+
+        }
+    }
+
+//async write for testing, adds contacts with 898688
+private class AddContacts1 extends AsyncTask<String, Integer, Long> {
+    @Override
+    protected Long doInBackground(String... params) {
+        WritePhoneContact("Acharya Sudip", "AM", "2452", "8986880192",cntx);
+        WritePhoneContact("Agrawal Dr. BB", "GM (BE&A&E)", "2311", "8986880051",cntx);
+        WritePhoneContact("Ahmad Md Shakil ", "SR MGR (C)", "2596", "8986880199",cntx);
+        WritePhoneContact("Ahuja RK", "DGM", "2203", "8986880319",cntx);
+        WritePhoneContact("Akhtar Md. ", "DM", "2421", "8986880163",cntx);
+        WritePhoneContact("Alam Md. Serfraj", "AM", "2372", "8986880295",cntx);
+        WritePhoneContact("Aman Md. Sharique", "AM", "2295", "8986880207",cntx);
+        WritePhoneContact("Anand BN", "DGM & HoD", "2296", "8986880177",cntx);
+        WritePhoneContact("Anand Kumar Aniket", "MT(T)", "2261", "8986880152",cntx);
+        WritePhoneContact("Aneesh PA", "AM", "2393", "8986880327",cntx);
+        WritePhoneContact("Banerjee Indranil ", "AGM", "2461", "8986880021",cntx);
+        WritePhoneContact("Banerjee Nirvik ", "DGM", "2453", "8986880078",cntx);
+        WritePhoneContact("Banerjee P ", "DGM", "2467", "8986880091",cntx);
+        WritePhoneContact("Banerjee S ", "SR MGR (C)", "2281", "8986880214",cntx);
+        WritePhoneContact("Barua P ", "DGM & HoG", "2542", "8986880304",cntx);
+        WritePhoneContact("Baskiyar R", "AGM", "2263", "8986880085",cntx);
+        WritePhoneContact("Bhakat Dr AK ", "GM(BE)", "2515", "8986880270",cntx);
+        WritePhoneContact("Bharati S", "AGM", "2301", "8986880222",cntx);
+        WritePhoneContact("Bhaskar Ujjwal ", "DGM & CoC", "2511", "8986880348",cntx);
+        WritePhoneContact("Bhowmik B", "DGM", "2493", "8986880118",cntx);
+        WritePhoneContact("Biswal AK ", "DGM & HoG", "2292", "8986880016",cntx);
+        WritePhoneContact("Burman AK", "DM (C)", "2276", "8986880298",cntx);
+        WritePhoneContact("Chakraborty Basudev", "AGM", "2325", "8986880066",cntx);
+        WritePhoneContact("Chakraborty S", "DM", "2270", "8986880043",cntx);
+        WritePhoneContact("Chakravarty Ms Neeta ", "AGM", "2529", "8986880286",cntx);
+        WritePhoneContact("Chandra Neeldeep", "AM", "", "8986880305",cntx);
+        WritePhoneContact("Chatterjee A", "DM", "2228", "8986880329",cntx);
+        WritePhoneContact("Chaudhuri Dr S ", "DGM & HoG", "2345", "8986880038",cntx);
+        WritePhoneContact("Chauhan KJ", "DGM & I/C", "2290", "8986880158",cntx);
+        WritePhoneContact("Chintaiah P", "DGM", "", "8986880318",cntx);
+        WritePhoneContact("Choubey M", "DGM & HoG", "2470", "8986880115",cntx);
+        WritePhoneContact("Choudhary Ram Ranjan", "DM", "2221", "8986880035",cntx);
+        WritePhoneContact("Choudhary RB", "MGR", "2562", "8986880292",cntx);
+        WritePhoneContact("Choudhary RR", "DM", "2244", "8986880284",cntx);
+        WritePhoneContact("Choudhury B", "AGM(Audit)", "", "8986880084",cntx);
+        WritePhoneContact("Chowdhury Md.Dr. G", "MGR", "2452", "8986880148",cntx);
+        WritePhoneContact("Das BK", "SR MGR", "2594", "8986880147",cntx);
+        WritePhoneContact("Das Dr TK ", "DGM & HoG", "2574", "8986880059",cntx);
+        WritePhoneContact("Das HN", "AM", "2474", "8986880065",cntx);
+        WritePhoneContact("Das SS ", "DGM & HoG", "2397", "8986880252",cntx);
+        WritePhoneContact("Das UK ", "DM", "2264", "8986880156",cntx);
+        WritePhoneContact("Dayal Vikash ", "SR MGR", "2371", "8986880145",cntx);
+        WritePhoneContact("De s", "DGM", "", "8986880248",cntx);
+        WritePhoneContact("De Saikat Kumar", "DM", "2294", "8986874007",cntx);
+        WritePhoneContact("Deepa Ms. M", "AM", "", "8986880171",cntx);
+        WritePhoneContact("Deva Dr. Anjana ", "AGM", "", "8986880274",cntx);
+        WritePhoneContact("Devi Ms. Sujata ", "DM", "", "8986880097",cntx);
+        WritePhoneContact("Dharma SS Kowshik", "JM", "", "8986880128",cntx);
+        WritePhoneContact("Dhua Dr. SK ", "DGM", "", "8986880217",cntx);
+        WritePhoneContact("Dutta Dr. Ramen", "GM (Steel & Ref)", "", "8986880006",cntx);
+        WritePhoneContact("Dutta Ranjan ", "SR.MGR", "", "8986880186",cntx);
+        WritePhoneContact("Gangadharan M ", "DGM & HoG", "", "8986880345",cntx);
+        WritePhoneContact("Ghosh Ghosh", "AM", "", "8986880.236",cntx);
+        WritePhoneContact("Ghosh KN", "DM", "", "8986880060",cntx);
+        WritePhoneContact("Ghosh Somnath", "DGM & HoG", "", "8986880048",cntx);
+        WritePhoneContact("Giri PK ", "MGR", "", "8986880308",cntx);
+        WritePhoneContact("Gogoi Ms. Barsha ", "AGM", "", "8986880112",cntx);
+        WritePhoneContact("Gopal Ravi ", "SR MGR", "", "8986880103",cntx);
+        WritePhoneContact("Goswami Ayan ", "AM", "", "8986880044",cntx);
+        WritePhoneContact("Goswami SP ", "DM", "", "8986880227",cntx);
+        WritePhoneContact("Gupta A ", "GM (C, E & E)", "", "8986880064",cntx);
+        WritePhoneContact("Gupta AK ", "DGM", "", "8986880108",cntx);
+        WritePhoneContact("Gupta Antriksha", "AM", "", "8986880169",cntx);
+        WritePhoneContact("Gupta INP ", "DGM", "", "8986880114",cntx);
+        WritePhoneContact("Gupta Sanjay Kumar ", "MGR", "", "8986880328",cntx);
+        WritePhoneContact("Gupta UK ", "AGM", "", "8986880221",cntx);
+        WritePhoneContact("Halder D", "DGM", "", "8986880302",cntx);
+        WritePhoneContact("Hembrom NNJ ", "AGM", "", "8986880042",cntx);
+        WritePhoneContact("Hussain Shahid ", "SR MGR (C)", "", "8986880336",cntx);
+        WritePhoneContact("Ilangovan S", "AGM", "", "8986880022",cntx);
+        WritePhoneContact("Jain DK", "DGM & HoG", "", "8986880201",cntx);
+        WritePhoneContact("Jee Shyam", "AM", "", "8986880253",cntx);
+        WritePhoneContact("Jha BK", "AM", "", "8986880349",cntx);
+        WritePhoneContact("Jha Capt. RK", "AGM", "", "8986880230",cntx);
+        WritePhoneContact("Jha PK", "AM", "", "8986880055",cntx);
+        WritePhoneContact("Jha RK ", "AM", "", "8986880200",cntx);
+        WritePhoneContact("Jha RK ", "DGM & HoG", "", "8986880296",cntx);
+        WritePhoneContact("Jha SK ", "AGM", "", "8986880203",cntx);
+        WritePhoneContact("Jha VK ", "SR MGR", "", "8986880139",cntx);
+        WritePhoneContact("Kalet M ", "AGM", "", "8986880266",cntx);
+        WritePhoneContact("Karmakar D", "DGM", "", "8986880273",cntx);
+        WritePhoneContact("Kathuria Ms. Laaxmu", "MT(T)", "", "8986880093",cntx);
+        WritePhoneContact("Keshari KK ", "DGM", "", "8986880209",cntx);
+        WritePhoneContact("Khalkho B", "DM", "", "8986880264",cntx);
+        WritePhoneContact("Khalkho Ms. Bhawna", "MT(T)", "", "8986880113",cntx);
+        WritePhoneContact("Khan S ", "DGM", "", "8986880301",cntx);
+        WritePhoneContact("Kirtivasan G", "Sr.Mgr", "", "8986880047",cntx);
+        WritePhoneContact("Krishana Gopal", "DM", "", "8986880033",cntx);
+        WritePhoneContact("Kujur Manish Kumar ", "AGM", "2477", "8986880317",cntx);
+        WritePhoneContact("Kujur Ms. Smita", "MT(T)", "2415", "8986880124",cntx);
+        WritePhoneContact("Kukreja VK ", "AGM", "2256", "8986880168",cntx);
+        WritePhoneContact("Kumar Alok ", "SR MGR", "2266", "8986880151",cntx);
+        WritePhoneContact("Kumar Anup", "AM", "2529", "8986880204",cntx);
+        WritePhoneContact("Kumar Ashok", "DGM", "2253", "8986880185",cntx);
+        WritePhoneContact("Kumar Chandan", "MT(T)", "2353", "8986880082",cntx);
+        WritePhoneContact("Kumar Dr. A ", "SR MGR", "2451", "8986880256",cntx);
+        WritePhoneContact("Kumar Dr. Vinod", "DGM", "2305", "8986880202",cntx);
+        WritePhoneContact("Kumar Dr.Santosh ", "DGM & HoG", "2443", "8986880275",cntx);
+        WritePhoneContact("Kumar Kaushlesh", "SR MGR", "2524", "8986880303",cntx);
+        WritePhoneContact("Kumar Manoj", "DM", "", "8986880455",cntx);
+        WritePhoneContact("Kumar Prabhas ", "DGM & HoG", "2307", "8986880120",cntx);
+        WritePhoneContact("Kumar Pradip ", "DM", "2311", "8986880247",cntx);
+        WritePhoneContact("Kumar Rajeev Ranjan ", "AM", "2513", "8986880131",cntx);
+        WritePhoneContact("Kumar Rishi Sumeet ", "AGM", "2393", "8986880346",cntx);
+        WritePhoneContact("Kumar Sachin", "MT(T)", "", "8986880067",cntx);
+        WritePhoneContact("Kumar Sanjay ", "DGM & HoG", "2370", "8986880105",cntx);
+        WritePhoneContact("Kumar Sanjeev ", "SR MGR", "2282", "8986880310",cntx);
+        WritePhoneContact("Kumar Santosh", "Mgr", "BSL", "8986880178",cntx);
+        WritePhoneContact("Kumar Siddhnath", "MT(T)", "", "8986880165",cntx);
+        WritePhoneContact("Kumar Somnath ", "DM", "2228", "8986880126",cntx);
+        WritePhoneContact("Kumar Vikash ", "SR MGR", "2353", "8986880107",cntx);
+        WritePhoneContact("Kumar Vikash ", "AM", "", "8986880190",cntx);
+        WritePhoneContact("Kushwaha SK", "SR MGR", "2510", "8986880356",cntx);
+        WritePhoneContact("Madhav Manish", "Jm", "", "8986880087",cntx);
+        WritePhoneContact("Mahapatra JC", "GM(P&A)", "", "8986880004",cntx);
+        WritePhoneContact("Maheshwari GD ", "DGM & HoG", "2325", "8986880251",cntx);
+        WritePhoneContact("Mahto SS ", "DM", "2540", "8986880100",cntx);
+        WritePhoneContact("Maini PK ", "AGM", "2509", "8986880235",cntx);
+        WritePhoneContact("Maitra Abhishek", "AM", "2455", "8986880211",cntx);
+        WritePhoneContact("Mallick Aritra", "AGM", "2535", "8986880125",cntx);
+        WritePhoneContact("Malviya Ankit", "DM", "2270", "8986880045",cntx);
+        WritePhoneContact("Mandal C", "DGM & HoG", "2566", "8986880288",cntx);
+        WritePhoneContact("Mandal M", "MGR (C)", "2286", "8986880338",cntx);
+        WritePhoneContact("Manjhi KK", "AGM", "2510", "8986880092",cntx);
+        WritePhoneContact("Mazumdar S Mitra ", "AGM", "2483", "8986880104",cntx);
+        WritePhoneContact("Minz Lucas ", "MGR", "2269", "8986880237",cntx);
+        WritePhoneContact("Minz Robinson ", "MGR (C)", "2311", "8986880323",cntx);
+        WritePhoneContact("Mishra RM ", "SR MGR", "2346", "8986880159",cntx);
+        WritePhoneContact("Misra Swayambhuba ", "DM", "2450", "8986880063",cntx);
+        WritePhoneContact("Mitra Somnath ", "DGM", "2393", "8986880347",cntx);
+        WritePhoneContact("Mohapatra SK", "DGM & HoG", "2471", "8986880167",cntx);
+        WritePhoneContact("Mondal A", "AGM", "2398", "8986880287",cntx);
+        WritePhoneContact("Mondal JS", "SR MGR", "2401", "8986880166",cntx);
+        WritePhoneContact("Mondal Ujjal Kumar", "AM", "2221", "8986880322",cntx);
+        WritePhoneContact("Nag Abhrojyoti  ", "AGM", "2232", "8986880514",cntx);
+        WritePhoneContact("Nageshwaran Kartik", "MT(T)", "2261", "8986880134",cntx);
+        WritePhoneContact("Nandy Dr. SK", "DGM", "2275", "8986880335",cntx);
+        WritePhoneContact("Nayak RK", "AM", "2374", "8986880135",cntx);
+        WritePhoneContact("Niyogi OS", "AM", "2508", "8986880062",cntx);
+        WritePhoneContact("Pan Dr. SK ", "DGM", "2317", "8986880144",cntx);
+        WritePhoneContact("Pandey Ms. Pratiksha", "AM", "2553", "8986880058",cntx);
+        WritePhoneContact("PandeyTN ", "AGM", "2316", "8986880503",cntx);
+        WritePhoneContact("Pankaj Pradeep K", "DM", "2529", "8986880366",cntx);
+        WritePhoneContact("Panna Ms Samira ", "AGM", "2314", "8986880208",cntx);
+        WritePhoneContact("Parida S ", "DGM", "2219", "8986880034",cntx);
+        WritePhoneContact("Pathak BN", "AM", "2480", "8986880052",cntx);
+        WritePhoneContact("Pathak DC", "AGM", "2258", "8986880188",cntx);
+        WritePhoneContact("Pathak P ", "DGM", "2400", "8986880223",cntx);
+        WritePhoneContact("Patnaik L", "GM (M&U)", "2259", "8986880003",cntx);
+        WritePhoneContact("Patwari Kuntal", "SM", "", "8986880076",cntx);
+        WritePhoneContact("Paul AK", "GM I/C.(RDCIS)", "2201", "8986880000",cntx);
+        WritePhoneContact("Paul Amitava", "AGM", "2385", "8986880326",cntx);
+        WritePhoneContact("Paul Ashim K ", "SR MGR (C)", "2336", "8986880046",cntx);
+        WritePhoneContact("Pradhan N ", "DGM & HoG", "2312", "8986880077",cntx);
+        WritePhoneContact("Prakash Satya ", "DM", "2374", "8986880110",cntx);
+        WritePhoneContact("Prakash Shree", "AM", "2474", "8986880181",cntx);
+        WritePhoneContact("Prasad Abdhesh ", "AM", "2228", "8986880321",cntx);
+        WritePhoneContact("Prasad Anup", "AGM", "2350", "8986880074",cntx);
+        WritePhoneContact("Prasad Ashit", "AGM", "2357", "8986880030",cntx);
+        WritePhoneContact("Prasad BKP", "AGM", "2285", "8986880187",cntx);
+        WritePhoneContact("Prasad Jwala ", "DM", "2517", "8986880089",cntx);
+        WritePhoneContact("Prasad Ramanuj", "AM", "2541", "8986880173",cntx);
+        WritePhoneContact("Raj Diwakar", "MT(T)", "2593", "8986880079",cntx);
+        WritePhoneContact("Ram Chotu", "AM", "2448", "8986880141",cntx);
+        WritePhoneContact("Ram HB ", "AM", "2246", "8986880123",cntx);
+        WritePhoneContact("Ram Ratnesh Kumar", "DM", "2371", "8986880142",cntx);
+        WritePhoneContact("Rath Manas ", "DGM", "2267", "8986880220",cntx);
+        WritePhoneContact("Rath Sushant ", "AGM", "2536", "8986880111",cntx);
+        WritePhoneContact("Reddy TS ", "DGM & HoG", "2583", "8986880095",cntx);
+        WritePhoneContact("Rohidas PC", "AM", "2272", "8986880072",cntx);
+        WritePhoneContact("Rouf Abdur", "AM", "2488", "8986880193",cntx);
+        WritePhoneContact("Roy Indranil ", "AM", "2477", "8986880037",cntx);
+        WritePhoneContact("Roy Mahadeo", "AGM", "2480", "8986880344",cntx);
+        WritePhoneContact("Roy Snehangshu", "AM", "2271", "8986880121",cntx);
+        WritePhoneContact("Saha KS", "AGM", "2248", "8986880157",cntx);
+        WritePhoneContact("Saha SK", "MGR", "2463", "8986880040",cntx);
+        WritePhoneContact("Sahana Pradip", "AM", "", "8986880182",cntx);
+        WritePhoneContact("Sahay Rajesh Paty", "SR MGR", "2278", "8986880195",cntx);
+        WritePhoneContact("Sahay VK ", "AGM", "2362", "8986880162",cntx);
+        WritePhoneContact("Sahoo Dr. Basant Kumar ", "AM", "2450", "8986880083",cntx);
+        WritePhoneContact("Sahoo Dr. Gadadhar ", "MGR", "2214", "8986880025",cntx);
+        WritePhoneContact("Sahu AK ", "DGM & HoG", "2500", "8986880029",cntx);
+        WritePhoneContact("Sahu NK ", "SR MGR (C)", "2592", "8986880234",cntx);
+        WritePhoneContact("Saravanan Dr.P ", "MGR", "2485", "8986880260",cntx);
+        WritePhoneContact("Sarkar B", "DGM", "2310", "8986880281",cntx);
+        WritePhoneContact("Sarkar Paritosh ", "AGM", "2362", "8986880499",cntx);
+        WritePhoneContact("Sarkar PP", "SR MGR", "2294", "8986880028",cntx);
+        WritePhoneContact("Saw SK ", "AGM", "2300", "8986880205",cntx);
+        WritePhoneContact("Saxena Atul", "GM (Product)", "2596", "8986880280",cntx);
+        WritePhoneContact("Selvam ST", "AGM", "2221", "8986880039",cntx);
+        WritePhoneContact("Selvi Ms S", "SR MGR", "2274", "8986880320",cntx);
+        WritePhoneContact("Sen Dr. N ", "DGM & HoG", "2326", "8986880153",cntx);
+        WritePhoneContact("Sen M ", "DGM", "2481", "8986880116",cntx);
+        WritePhoneContact("Sen S", "SR MGR", "2202", "8986880053",cntx);
+        WritePhoneContact("Sen Sagnik", "MT(T)", "", "8986880024",cntx);
+        WritePhoneContact("Shankar Anand", "MT(T)", "2421", "8986880137",cntx);
+        WritePhoneContact("Sharan AK", "AM", "2276", "8986880224",cntx);
+        WritePhoneContact("Sharan Ms Archana ", "AGM", "2539", "8986880106",cntx);
+        WritePhoneContact("Sharma KL ", "AGM", "2447", "8986880191",cntx);
+        WritePhoneContact("Shree Ms Manju ", "AGM", "2293", "8986880331",cntx);
+        WritePhoneContact("Shukla Sanjeev Kr ", "AGM", "2372", "8986880279",cntx);
+        WritePhoneContact("Singh AK", "AM (C)", "2417", "8986880090",cntx);
+        WritePhoneContact("Singh AK", "DM", "2438", "8986880263",cntx);
+        WritePhoneContact("Singh BK", "AM", "2246", "8986880313",cntx);
+        WritePhoneContact("Singh Digvijay ", "SR MGR", "2254", "8986880189",cntx);
+        WritePhoneContact("Singh DK", "AGM", "2207", "8986880243",cntx);
+        WritePhoneContact("Singh Dr.Balbir ", "DGM & HoG", "2449", "8986880246",cntx);
+        WritePhoneContact("Singh JP", "SR MGR", "2441458", "8986880355",cntx);
+        WritePhoneContact("Singh KK", "AGM", "2323", "8986880290",cntx);
+        WritePhoneContact("Singh Ms Indu ", "MGR (C)", "2380", "8986880027",cntx);
+        WritePhoneContact("Singh Raj Kr ", "MGR", "2499", "8986880194",cntx);
+        WritePhoneContact("Singh Rajeev Kr ", "AGM", "2385", "8986880324",cntx);
+        WritePhoneContact("Singh Raju Kr", "DM", "2513", "8986880238",cntx);
+        WritePhoneContact("Singh Rakesh Kr", "DGM", "2520", "8986880309",cntx);
+        WritePhoneContact("Singh RK ", "MGR", "2344", "8986880080",cntx);
+        WritePhoneContact("Singh Shaktiveer", "MGR", "2353", "8986880196",cntx);
+        WritePhoneContact("Singh SN", "AM", "2540", "8986880081",cntx);
+        WritePhoneContact("Singh Tek ", "MGR", "2268", "8986880337",cntx);
+        WritePhoneContact("Sinha Narendra K ", "AGM", "2262", "8986880228",cntx);
+        WritePhoneContact("Sinha RB ", "MGR", "2491", "8986880122",cntx);
+        WritePhoneContact("Srikanth S", "AGM & HoG", "2216", "8986880261",cntx);
+        WritePhoneContact("Srivastava Rahul", "AM", "2529", "8986880283",cntx);
+        WritePhoneContact("Srivastava SK", "AM", "2501", "8986880267",cntx);
+        WritePhoneContact("Sudhir Shivprakash", "AM", "2594", "8986880325",cntx);
+        WritePhoneContact("Thakur DK ", "SR MGR", "2344", "8986880101",cntx);
+        WritePhoneContact("Thakur KR", "AGM", "2280", "8986880226",cntx);
+        WritePhoneContact("Thakur SK", "MGR", "2282", "8986880088",cntx);
+        WritePhoneContact("Tirkey Prema ", "DM", "2441458", "8986880183",cntx);
+        WritePhoneContact("Tiwari Dr. SN ", "SR MGR", "2498", "8986880096",cntx);
+        WritePhoneContact("Tiwari RK ", "MGR", "2581", "8986880278",cntx);
+        WritePhoneContact("Toppo Krishna Kumar", "AM", "2586", "8986880299",cntx);
+        WritePhoneContact("Upadhyay NC ", "AM", "2281", "8986880098",cntx);
+        WritePhoneContact("Verma AK", "AGM", "2357", "8986880036",cntx);
+        WritePhoneContact("Verma KK", "JE", "2249", "8986880031",cntx);
+        return Long.valueOf(0);
+
+    }
+
+    protected void onProgressUpdate(Integer... progress) {
+
+    }
+
+    protected void onPostExecute(Long result) {
+        spinner.setVisibility(View.GONE);
+        Toast.makeText(MainActivity.this, "All Contacts Added", Toast.LENGTH_LONG).show();
+
+    }
+}
+}
+
